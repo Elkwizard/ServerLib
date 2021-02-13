@@ -6,10 +6,42 @@ function log(...msg) {
 	console.log(...msg);
 }
 
+const socket = {
+	sockets: new Map(),
+	onreceive: null,
+	get ids() { return this.sockets.keys(); },
+	send(id, value) {
+		if (this.sockets.has(id)) this.sockets.get(id).push(value);
+	}
+};
+
 function handle(type, data) {
 	switch (type) {
 		case "AUTH": {
 			return authenticate(data);
+		};
+		case "SOCKETOPEN": {
+			const id = data;
+			socket.sockets.set(id, []);
+			return Promise.resolve(socket.sockets.size);
+		};
+		case "SOCKETCLOSE": {
+			const id = data;
+			socket.sockets.delete(id);
+			return Promise.resolve(socket.sockets.size);
+		};
+		case "SOCKETGET": {
+			const id = data;
+			if (socket.sockets.has(id) && socket.sockets.get(id).length) {
+				const value = socket.sockets.get(id).shift();
+				return Promise.resolve({ value });
+			}
+			return Promise.resolve(null);
+		};
+		case "SOCKETPUT": {
+			const { id, value } = data;
+			if (socket.onreceive !== null) socket.onreceive(id, value);
+			return Promise.resolve(null);
 		};
 	}
 
@@ -32,7 +64,7 @@ function tableRow(a, b, c, ca, cb, cc) {
 	return `║ ${ca}${a}\x1b[0m` + " ".repeat(METHOD_WIDTH - a.length) + ` ║ ${cb}${b}\x1b[0m` + " ".repeat(STATUS_WIDTH - b.length) + "║ " + `${cc}${c}\x1b[0m`;
 }
 
-const METHOD_WIDTH = 15;
+const METHOD_WIDTH = 25;
 const STATUS_WIDTH = 25;
 
 const tableDivider = "╠" + "═".repeat(2 + METHOD_WIDTH) + "╬" + "═".repeat(1 + STATUS_WIDTH) + "╬" + "═".repeat(68);
@@ -58,9 +90,11 @@ const server = http.createServer((request, response) => {
 
 			const filePath = path.join(".", url);
 			
-			function finish(msg, subtype) {
-				console.log(tableRow(method + (subtype ? ":" + subtype : ""), `${response.statusCode} ${msg}`, url, "\x1b[1m\x1b[31m", "\x1b[33m", "\x1b[32m"));
-				if (!onDomain) console.log(tableDivider);
+			function finish(msg, subtype, log) {
+				if (log) {
+					console.log(tableRow(method + (subtype ? ":" + subtype : ""), `${response.statusCode} ${msg}`, url, "\x1b[1m\x1b[31m", "\x1b[33m", "\x1b[32m"));
+					if (!onDomain) console.log(tableDivider);
+				}
 				response.end();
 			}
 
@@ -109,10 +143,11 @@ const server = http.createServer((request, response) => {
 						const { type, data } = JSON.parse(body);
 						handle(type, data).then(result => {
 							response.write(JSON.stringify(result));
-							finish("RESPONDED", type);
+							finish("RESPONDED", type, type !== "SOCKETGET");
 						});
 					} catch (err) {
 						response.statusCode = 200;
+						console.error(err)
 						finish("UNKNOWN POST");
 					}
 					break;
@@ -123,6 +158,8 @@ const server = http.createServer((request, response) => {
 
 const onDomain = false;
 server.listen(8080, onDomain ? "hhhost.me" : "localhost");
+
+eval(fs.readFileSync("./ServerLib/server/socket.js", "utf-8"));
 
 server.on("listening", () => {
 	log("listening on port 8080");

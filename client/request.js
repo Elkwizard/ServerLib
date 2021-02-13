@@ -13,24 +13,23 @@ module("request", self => {
 		return abs;
 	}
 
-	function postMessage(type, data) {
-		const xhr = new XMLHttpRequest();
-		xhr.open("POST", "", true);
-		xhr.setRequestHeader("Content-Type", "text/plain;charset=UTF-8");
-		xhr.send(JSON.stringify({ type, data }));
-		return new Promise((resolve, reject) => {
-			xhr.onreadystatechange = () => {
-				if (xhr.readyState === XMLHttpRequest.DONE) {
-					if (xhr.status === 200) resolve(xhr.responseText);
-					else reject(xhr.status);
-				}
-			};
-		});
-	}
-
 	return {
+		postMessage(type, data) {
+			const xhr = new XMLHttpRequest();
+			xhr.open("POST", "", true);
+			xhr.setRequestHeader("Content-Type", "text/plain;charset=UTF-8");
+			xhr.send(JSON.stringify({ type, data }));
+			return new Promise((resolve, reject) => {
+				xhr.onreadystatechange = () => {
+					if (xhr.readyState === XMLHttpRequest.DONE) {
+						if (xhr.status === 200) resolve(JSON.parse(xhr.responseText));
+						else reject(xhr.status);
+					}
+				};
+			});
+		},
 		authenticate(password) {
-			return postMessage("AUTH", password).then(string => string === "true");
+			return self.postMessage("AUTH", password).then(bool => !!bool);
 		},
 		setString(url, string, password) {
 			const xhr = new XMLHttpRequest();
