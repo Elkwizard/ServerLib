@@ -8,7 +8,7 @@ function module(name, create) {
 server.loaded = (async () => {
 	let path = document.currentScript.src;
 	path = path.slice(0, path.length - 6);
-	const scripts = ["path", "request", "socket"];
+	const scripts = ["hash", "path", "request", "socket"];
 	for (let script of scripts) {
 		const el = document.createElement("script");
 		el.src = `${path}${script}.js`;
