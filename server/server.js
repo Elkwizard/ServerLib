@@ -25,15 +25,14 @@ class SocketServer {
 		this.clientMessages.delete(id);
 		return null;
 	}
-	getSocketData(id) {
-		if (this.clientMessages.has(id) && this.clientMessages.get(id).length) {
-			const value = this.clientMessages.get(id).shift();
-			return { value };
+	updateSocket(id, messages) {
+		if (this.onreceive !== null) for (const message of messages) this.onreceive(id, message);
+		
+		if (this.clientMessages.has(id) && this.clientMessages.get(id).length > 0) {
+			const returnMessages = this.clientMessages.get(id);
+			this.clientMessages.set(id, []);
+			return { messages: returnMessages };
 		}
-		return null;
-	}
-	putSocketData(id, value) {
-		if (this.onreceive !== null) this.onreceive(id, value);
 		return null;
 	}
 	send(id, value) {
@@ -57,8 +56,7 @@ function handle(type, data) {
 			socketServer.openSocket(data.id);
 			return Promise.resolve(true);
 		case "SOCKETCLOSE": return Promise.resolve(socketServer.closeSocket(data.id));
-		case "SOCKETGET": return Promise.resolve(socketServer.getSocketData(data.id));
-		case "SOCKETPUT": return Promise.resolve(socketServer.putSocketData(data.id, data.value));
+		case "SOCKETUPDATE": return Promise.resolve(socketServer.updateSocket(data.id, data.messages));
 	}
 
 }
@@ -159,7 +157,7 @@ const server = http.createServer((request, response) => {
 						const { type, data } = JSON.parse(body);
 						handle(type, data).then(result => {
 							response.write(JSON.stringify(result));
-							finish("RESPONDED", type, type !== "SOCKETGET");
+							finish("RESPONDED", type, type === "SOCKETUPDATE" ? data.messages.length : true);
 						});
 					} catch (err) {
 						response.statusCode = 200;
