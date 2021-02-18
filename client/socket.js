@@ -10,12 +10,13 @@ module("socket", self => ({
 		const socket = {
 			id,
 			server: socketServer,
-			serverMessages: [],
 			onreceive: null,
-			send(value) {
-				this.serverMessages.push(value);
+			onclose: null,
+			send(message) {
+				server.request.postMessage("SOCKETPUT", { id, server: socketServer, message });
 			},
 			close() {
+				if (this.onclose !== null) this.onclose();
 				if (open) {
 					open = false;
 					return server.request.postMessage("SOCKETCLOSE", { id, server: socketServer });
@@ -27,15 +28,16 @@ module("socket", self => ({
 		if (!(await server.request.postMessage("SOCKETOPEN", { id, server: socketServer })))
 			throw new Error(`Socket server '${socketServer}' does not exist`);
 
-		const update = () => {
-			server.request.postMessage("SOCKETUPDATE", { id, messages: socket.serverMessages, server: socketServer }).then(data => {
-				if (socket.onreceive !== null && data !== null) for (const message of data.messages) socket.onreceive(message);
-				if (open) update();
+		const poll = () => {
+			server.request.postMessage("SOCKETGET", { id, server: socketServer }).then(data => {
+				if (data === null) return socket.close();
+				if (socket.onreceive !== null) for (const message of data.messages) socket.onreceive(message);
+				if (open) poll();
 			});
 			socket.serverMessages = [];
 		};
 
-		update();
+		poll();
 	
 		return socket;
 	}

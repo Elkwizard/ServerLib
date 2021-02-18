@@ -6,37 +6,65 @@ function log(...msg) {
 	console.log(...msg);
 }
 
+class SocketClient {
+	constructor(id) {
+		this.messages = [];
+		this.poll = null;
+		this.id = id;
+	}
+	close() {
+		if (this.poll !== null) this.poll.resolve(null);
+	}
+}
+
 class SocketServer {
 	constructor(id, path) {
 		this.id = id;
 		this.onreceive = null;
-		this.clientMessages = new Map();
+		this.clientSockets = new Map();
 		const socket = this;
 		eval(fs.readFileSync(path, "utf-8"));
 	}
 	get clients() {
-		return new Set(this.clientMessages.keys());
+		return new Set(this.clientSockets.keys());
 	}
 	openSocket(id) {
-		this.clientMessages.set(id, []);
+		this.clientSockets.set(id, new SocketClient(id));
 		return null;
 	}
 	closeSocket(id) {
-		this.clientMessages.delete(id);
-		return null;
-	}
-	updateSocket(id, messages) {
-		if (this.onreceive !== null) for (const message of messages) this.onreceive(id, message);
-		
-		if (this.clientMessages.has(id) && this.clientMessages.get(id).length > 0) {
-			const returnMessages = this.clientMessages.get(id);
-			this.clientMessages.set(id, []);
-			return { messages: returnMessages };
+		if (this.clientSockets.has(id)) {
+			this.clientSockets.get(id).close();
+			this.clientSockets.delete(id);
 		}
 		return null;
 	}
-	send(id, value) {
-		if (this.clientMessages.has(id)) this.clientMessages.get(id).push(value);
+	socketGet(id) {
+		if (this.clientSockets.has(id)) {
+			const socket = this.clientSockets.get(id);
+			if (socket.messages.length) {
+				const result = { messages: socket.messages };
+				socket.messages = [];
+				return Promise.resolve(result);
+			}
+			return new Promise(resolve => socket.poll = { resolve });
+		}
+		return Promise.resolve(null);
+	}
+	socketPut(id, message) {
+		if (this.onreceive !== null) this.onreceive(id, message);
+		return null;
+	}
+	send(id, message) {
+		if (this.clientSockets.has(id)) {
+			const socket = this.clientSockets.get(id);
+			socket.messages.push(message);
+			if (socket.poll !== null) {
+				const response = { messages: socket.messages };
+				socket.messages = [];
+				socket.poll.resolve(response);
+			}
+		}
 		return null;
 	}
 }
@@ -56,7 +84,8 @@ function handle(type, data) {
 			socketServer.openSocket(data.id);
 			return Promise.resolve(true);
 		case "SOCKETCLOSE": return Promise.resolve(socketServer.closeSocket(data.id));
-		case "SOCKETUPDATE": return Promise.resolve(socketServer.updateSocket(data.id, data.messages));
+		case "SOCKETGET": return socketServer.socketGet(data.id);
+		case "SOCKETPUT": return Promise.resolve(socketServer.socketPut(data.id, data.message));
 	}
 
 }
@@ -157,7 +186,7 @@ const server = http.createServer((request, response) => {
 						const { type, data } = JSON.parse(body);
 						handle(type, data).then(result => {
 							response.write(JSON.stringify(result));
-							finish("RESPONDED", type, type === "SOCKETUPDATE" ? data.messages.length : true);
+							finish("RESPONDED", type);
 						});
 					} catch (err) {
 						response.statusCode = 200;
