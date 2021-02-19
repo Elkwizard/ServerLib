@@ -22,6 +22,7 @@ class SocketServer {
 		this.id = id;
 		this.onreceive = null;
 		this.clientSockets = new Map();
+		this.putRequest = null;
 		const socket = this;
 		eval(fs.readFileSync(path, "utf-8"));
 	}
@@ -52,14 +53,25 @@ class SocketServer {
 		return Promise.resolve(null);
 	}
 	socketPut(id, message) {
-		if (this.onreceive !== null) this.onreceive(id, message);
+		if (this.clientSockets.has(id)) {
+			const socket = this.clientSockets.get(id);
+			this.putRequest = id;
+			if (this.onreceive !== null) this.onreceive(id, message);
+			this.putRequest = null;
+			if (socket.messages.length) {
+				const result = { messages: socket.messages };
+				socket.messages = [];
+				return result
+			}
+			return null;
+		}
 		return null;
 	}
 	send(id, message) {
 		if (this.clientSockets.has(id)) {
 			const socket = this.clientSockets.get(id);
 			socket.messages.push(message);
-			if (socket.poll !== null) {
+			if (socket.poll !== null && (id !== this.putRequest)) {
 				const response = { messages: socket.messages };
 				socket.messages = [];
 				socket.poll.resolve(response);
@@ -69,17 +81,17 @@ class SocketServer {
 	}
 }
 
-const socketServers = { };
+const socketServers = {};
 
 function handle(type, data) {
 	let socketServer;
-	if (type.startsWith("SOCKET")) socketServer = socketServers[data.server];	
+	if (type.startsWith("SOCKET")) socketServer = socketServers[data.server];
 
 	switch (type) {
 		case "AUTH": return authenticate(data);
-		
+
 		//sockets
-		case "SOCKETOPEN": 
+		case "SOCKETOPEN":
 			if (socketServer === undefined) return Promise.resolve(false);
 			socketServer.openSocket(data.id);
 			return Promise.resolve(true);
@@ -132,7 +144,7 @@ const server = http.createServer((request, response) => {
 			}
 
 			const filePath = path.join(".", url);
-			
+
 			function finish(msg, subtype, log = true) {
 				if (log) {
 					console.log(tableRow(method + (subtype ? ":" + subtype : ""), `${response.statusCode} ${msg}`, url, "\x1b[1m\x1b[31m", "\x1b[33m", "\x1b[32m"));
@@ -226,7 +238,7 @@ server.on("listening", () => {
 
 	// create table header
 
-	if (!onDomain) {		
+	if (!onDomain) {
 		console.log("╔" + "═".repeat(2 + METHOD_WIDTH) + "╦" + "═".repeat(1 + STATUS_WIDTH) + "╦" + "═".repeat(68));
 		console.log(tableRow("METHOD", "STATUS", "URL", "\x1b[1m", "\x1b[1m", "\x1b[1m"));
 		console.log(tableDivider);

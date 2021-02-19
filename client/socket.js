@@ -13,7 +13,9 @@ module("socket", self => ({
 			onreceive: null,
 			onclose: null,
 			send(message) {
-				server.request.postMessage("SOCKETPUT", { id, server: socketServer, message });
+				server.request.postMessage("SOCKETPUT", { id, server: socketServer, message }).then(data => {
+					if (data !== null && socket.onreceive !== null) for (const message of data.messages) socket.onreceive(message);
+				});
 			},
 			close() {
 				if (this.onclose !== null) this.onclose();
