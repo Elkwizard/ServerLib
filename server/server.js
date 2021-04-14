@@ -77,7 +77,6 @@ class SocketServer {
 				socket.poll.resolve(response);
 			}
 		}
-		return null;
 	}
 }
 
@@ -88,7 +87,7 @@ function handle(type, data) {
 	if (type.startsWith("SOCKET")) socketServer = socketServers[data.server];
 
 	switch (type) {
-		case "AUTH": return authenticate(data);
+		case "AUTH": return authenticate(data.folder, data.password);
 
 		//sockets
 		case "SOCKETOPEN":
@@ -102,9 +101,10 @@ function handle(type, data) {
 
 }
 
-function authenticate(password) {
+function authenticate(folder, password) {
+	const passwordPath = path.join(".", folder, "password.hide.txt");
 	return new Promise(resolve => {
-		fs.readFile("auth/password.hide.txt", "utf-8", (err, result) => {
+		fs.readFile(passwordPath, "utf-8", (err, result) => {
 			if (err) {
 				resolve(false);
 			} else {
@@ -176,7 +176,7 @@ const server = http.createServer((request, response) => {
 				};
 				case "PUT": {
 					if ("password" in params) {
-						authenticate(params.password).then(success => {
+						authenticate(path.dirname(filePath), params.password).then(success => {
 							if (success) {
 								fs.writeFile(filePath, body, "utf-8", err => {
 									if (err) {

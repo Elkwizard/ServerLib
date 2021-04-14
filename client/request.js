@@ -28,8 +28,8 @@ module("request", self => {
 				};
 			});
 		},
-		authenticate(password) {
-			return self.postMessage("AUTH", password).then(bool => !!bool);
+		authenticate(folder, password) {
+			return self.postMessage("AUTH", { folder: absoluteURL(folder), password }).then(bool => !!bool);
 		},
 		setString(url, string, password) {
 			const xhr = new XMLHttpRequest();
